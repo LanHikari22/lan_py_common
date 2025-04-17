@@ -1,0 +1,3 @@
+[mypy]
+plugins =
+  classes.contrib.mypy.classes_plugin

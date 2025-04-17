@@ -1,6 +1,0 @@
-Metadata-Version: 2.4
-Name: lan_py_common
-Version: 0.1.0
-Summary: Code common across my python projects
-Author-email: Mohammed Alzakariya <lanhikarixx@gmail.com>
-Requires-Dist: checkpipe

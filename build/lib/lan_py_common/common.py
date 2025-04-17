@@ -41,8 +41,8 @@ class IO(Generic[IO_T]):
 AppError_Enums = TypeVar('AppError_Enums')
 
 class AppError(Generic[AppError_Enums]):
-    def __init__(self, err: AppError_Enums, details: str='', data: Dict[str, Any]={}):
-        self.err = err
+    def __init__(self, errno: AppError_Enums, details: str='', data: Dict[str, Any]={}):
+        self.errno = errno
         self.details = details
         self.data = data
     
@@ -75,30 +75,3 @@ def os_system(command: str) -> IO[None]:
     os.system(command)
     return IO(None)
 
-
-def today():
-    import datetime
-
-    return (
-        datetime
-            .now()
-            .replace(hour=0, minute=0, second=0, microsecond=0)
-    )
-
-
-def np_cartesian_product(a, b):
-    import numpy as np
-
-    # Create a meshgrid
-    a_grid, b_grid = np.meshgrid(a, b)
-
-    # Flatten the grids and stack them to get the cartesian product
-    # Flattening gets rid of the [[...], [...]] and turns it into a continuous stream [...]
-    # For example, for the a_grid, each row where it repeats is in a [[...]]. ex [[0,1,2], [0,1,2], ...]
-    a_flat = a_grid.flatten()
-    b_flat = b_grid.flatten()
-
-    # Since a_flat and b_flat now align, they just need to be turned into a tuple with vstack
-    a_x_b = np.vstack([a_flat, b_flat]).T
-
-    return a_x_b
