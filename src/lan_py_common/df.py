@@ -39,6 +39,11 @@ def is_dtype_compatible(val: Any, dtype: str) -> bool:
     if val is None:
         return True  # Let nullability logic handle this
     try:
+        # allow upcast
+        if nullable_alternative_to_ty_s(dtype) == 'float':
+            if val == int:
+                val = float
+
         if np.issubdtype(val, np.dtype(nullable_alternative_to_ty_s(dtype))):
             return True
         else:
@@ -51,6 +56,7 @@ def is_dtype_compatible(val: Any, dtype: str) -> bool:
 class FromStrForDfJsonSchemaErrTy(enum.Enum):
     FailedToParseJson = enum.auto()
     SchemaNotFlat = enum.auto()
+    FailedToParseTyName = enum.auto()
 
 FromStrForDfJsonSchemaErr = Tuple[FromStrForDfJsonSchemaErrTy, str]
 
@@ -80,6 +86,40 @@ class ImplTrFromStrForDfJsonSchema(Protocol):
         if not is_flat_fn():
             return Err((FromStrForDfJsonSchemaErrTy.SchemaNotFlat, e.msg))
         
+        # Extract the special ty column
+        ty_name_query = (
+            s_jsn_col_to_val
+                .items()
+                .__iter__()
+                | pipe.OfIter[Tuple[str, Any]]
+                .filter(pipe.tup2_unpack(lambda col, _:
+                    col == "ty"
+                ))
+                | pipe.OfIter[Tuple[str, Any]]
+                .map(pipe.tup2_unpack(lambda _, name:
+                    name
+                ))
+                | pipe.OfIter[str]
+                .to_list()
+        )
+        if len(ty_name_query) != 1:
+            return Err((FromStrForDfJsonSchemaErrTy.FailedToParseTyName, ""))
+
+        # exclude ty from further consideration
+        s_jsn_col_to_val = (
+            s_jsn_col_to_val
+                .items()
+                .__iter__()
+                | pipe.OfIter[Tuple[str, Any]]
+                .filter(pipe.tup2_unpack(lambda col, _:
+                    col != "ty"
+                ))
+                | pipe.OfIter[Tuple[str, Any]]
+                .to_list()
+                | pipe.Of[List[Tuple[str, Any]]]
+                .map(lambda lst: dict(lst))
+        )
+
         cols = (
             s_jsn_col_to_val
                 .items()
@@ -127,13 +167,23 @@ class ImplTrFromStrForDfJsonSchema(Protocol):
                     .map(lambda lst: dict(lst))
         )
         
-        return Ok(DfJsonSchema(s, cols, col_to_ty_s, col_to_nullable))
+        return Ok(DfJsonSchema(s, ty_name_query[0], cols, col_to_ty_s, col_to_nullable))
         
+
+class ImplTrFromDictForDfJsonSchema(TrFromDict):
+    @staticmethod
+    def from_dict(d: Dict[Hashable, Any]) -> Result[Self, FromStrForDfJsonSchemaErr]:
+        import json
+
+        return DfJsonSchema.from_str(json.dumps(d))
+    
 @dataclass
 class DfJsonSchema(
-    ImplTrFromStrForDfJsonSchema
+    ImplTrFromStrForDfJsonSchema,
+    ImplTrFromDictForDfJsonSchema
 ):
     schema: str
+    ty: str
     cols: List[str]
     col_to_ty_s: Dict[str, str]
     col_to_nullable: Dict[str, bool]
@@ -147,12 +197,16 @@ class VerifyBySchemaDfErrTy(enum.Enum):
     UnequalNumOfColumns = enum.auto()
     SchemaOrderError = enum.auto()
     WrongTypeError = enum.auto()
+    UnequalSchemaTy = enum.auto()
 
 VerifyBySchemaDfErr = Tuple[VerifyBySchemaDfErrTy, str]
 
 class ImplTrVerifyBySchemaForDf(TrVerifyBySchema):
-    def verify_by_schema(self: 'Df', schema: DfJsonSchema) -> Result[None, VerifyBySchemaDfErr]:
+    def verify_by_schema(self: 'Df', schema: DfJsonSchema, verify_data=False) -> Result[None, VerifyBySchemaDfErr]:
         import numpy as np
+
+        if self.schema.ty == schema.ty:
+            return Err((VerifyBySchemaDfErrTy.UnequalSchemaTy, ""))
 
         if len(schema.col_to_ty_s.items()) != len(self.df.dtypes.items()):
             return Err((VerifyBySchemaDfErrTy.UnequalNumOfColumns, ""))
@@ -208,7 +262,7 @@ class ImplTrVerifyBySchemaForDf(TrVerifyBySchema):
 
         return (
             all_tys_matching()
-                .and_then(check_rows_for_null)
+                .and_then(lambda _: not verify_data or check_rows_for_null())
         )
 
 
@@ -217,7 +271,9 @@ class CreateDfErrTy(enum.Enum):
     InvalidDatarecords = enum.auto()
     ColumnOfInvalidTy = enum.auto()
     InvalidNullValue = enum.auto()
-    InvalidSchemaMap = enum.auto()
+    RenameMapNotSchemaComplete = enum.auto()
+    RenameMapNamesInvalidColumn = enum.auto()
+    SchemaMapUnequalTys = enum.auto()
 
 CreateDfErr = Tuple[CreateDfErrTy, str]
 
@@ -291,6 +347,30 @@ class ImplTrFromschemaAndDataForDf(TrFromSchemaAndData):
         
         return Ok(mut_df)
 
+class ImplTrFromSchemaAndCsvForDf(TrFromSchemaAndCsv):
+    @staticmethod
+    def from_schema_and_csv(schema: DfJsonSchema, csv_filename: str) -> Result['Df', CreateDfErr]:
+        df = pd.read_csv(csv_filename)
+        val_per_row_per_col = df.to_dict(orient="list")
+
+        filtered_val_per_row_per_col = (
+            val_per_row_per_col
+                .items()
+                .__iter__()
+                | pipe.OfIter[Tuple[Hashable, Any]]
+                .filter(pipe.tup2_unpack(lambda col, _:
+                    col in schema.cols
+                ))
+                | pipe.OfIter[Tuple[Hashable, Any]]
+                .to_list()
+                | pipe.Of[List[Tuple[Hashable, Any]]]
+                .map(lambda lst: dict(lst))
+        )
+
+        return Df.from_schema_and_data(schema, filtered_val_per_row_per_col)
+
+
+
 
 class ImplTrMapSchemaForDf(TrMapSchema):
     def map_schema(
@@ -301,7 +381,7 @@ class ImplTrMapSchemaForDf(TrMapSchema):
         import json
 
         if len(new_schema.cols) != len(col_to_new_col.keys()):
-            return Err((CreateDfErrTy.InvalidSchemaMap, 
+            return Err((CreateDfErrTy.RenameMapNotSchemaComplete, 
                         f'rename dict is not complete with new schema: {len(new_schema.cols)} != {len(col_to_new_col.keys())}'))
         
         # Check that all of the columns in the dict keys exist in self.schema
@@ -317,7 +397,7 @@ class ImplTrMapSchemaForDf(TrMapSchema):
                 ))
         )
         if not valid_keys_and_vals:
-            return Err((CreateDfErrTy.InvalidSchemaMap, 
+            return Err((CreateDfErrTy.RenameMapNamesInvalidColumn, 
                         f'Column rename mapper naming invalid columns'))
 
 
@@ -333,7 +413,7 @@ class ImplTrMapSchemaForDf(TrMapSchema):
                 ))
         )
         if not cols_of_corresponding_tys:
-            return Err((CreateDfErrTy.InvalidSchemaMap, 
+            return Err((CreateDfErrTy.SchemaMapUnequalTys, 
                         f'Columns between schemas are not of identical types'))
 
         # Filter out any columns not in the dict val from the new df
@@ -367,6 +447,7 @@ class Df(
     ImplTrFromSchemaForDf,
     ImplTrFromschemaAndDataForDf,
     ImplTrMapSchemaForDf,
+    ImplTrFromSchemaAndCsvForDf,
 ):
     schema: DfJsonSchema
     df: pd.DataFrame
