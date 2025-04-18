@@ -2,3 +2,4 @@ checkpipe
 numpy
 pandas
 altair
+matplotlib
