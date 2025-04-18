@@ -52,6 +52,11 @@
 
 <!-- <img alt="TTM Demo" src="https://user-images.githubusercontent.com/9413602/105746868-f3734a00-5f7a-11eb-8db5-22fcf50a171b.gif" /> TODO -->
 
+- [What is this?](#what-is-this)
+- [Contributing](#contributing)
+- [License](#license)
+
+
 # What is this?
 This is an ad-hoc library for type-safe data exploration in python and other common python needs. It includes schema-aware dataframes as well as some common plotting functions and mathematical types for sympy. Independent libraries can split from this given significant development or when the need arises. 
 
@@ -79,10 +84,10 @@ mpl_scatter2(plot_df, groupby_method="sum")
 
 The dataframe schema also allows null values within the columns if one specifies Optional[int] instead of int for example.
 
-## Contributing
+# Contributing
 
 All contributions are welcome! I would appreciate feedback on improving the library and optimizing for use cases I haven't thought of yet! Please feel free to contact me by opening an issue ticket or emailing lanhikarixx@gmail.com if you want to chat.
 
-## License
+# License
 
 This theme is licensed under the [MIT license](https://opensource.org/licenses/mit-license.php) © Mohammed Alzakariya.
