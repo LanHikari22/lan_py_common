@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 import pytest
-import pandas as pd
+import pandas as pd # type: ignore
 from lan_py_common.df import Df, DfJsonSchema, CreateDfErrTy, FromStrForDfJsonSchemaErrTy
 
 @pytest.mark.parametrize("_, schema, xs, ys, opt_error_code", [

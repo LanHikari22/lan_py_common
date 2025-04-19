@@ -1,29 +1,28 @@
-from typing import List, Tuple, Optional
+from typing import List, Literal, Tuple, Optional
 from datetime import datetime, timedelta
 import matplotlib as mpl
 from matplotlib.axes import Axes
-import pandas as pd
+import pandas as pd # type: ignore
 import numpy as np
 import altair as alt
 import matplotlib.pyplot as plt
-from scipy.stats import gaussian_kde
+from scipy.stats import gaussian_kde # type: ignore
 from .df import *
 
 ColRenameDict = Dict[str, str]
 
 # Porting some of these from calc_dated_lib plotting
 
-
 @dataclass
 class Scatter2Df:
     df: Df
     new_to_old: ColRenameDict
 
-
 def to_scatter2_df(df: Df, col_x: str, col_y: str) -> Result[Scatter2Df, CreateDfErr]:
     new_to_old = {"x": col_x, "y": col_y}
     old_to_new = {v: k for k, v in new_to_old.items()}
-    return Ok(
+
+    res: Result[Scatter2Df, CreateDfErr] = (
         df
             .map_schema(
                 DfJsonSchema.from_dict({
@@ -33,9 +32,10 @@ def to_scatter2_df(df: Df, col_x: str, col_y: str) -> Result[Scatter2Df, CreateD
                 }).unwrap(),
                 old_to_new
             )
-            .and_then(lambda df: Scatter2Df(df, new_to_old))
+            .and_then(lambda df: Ok(Scatter2Df(df, new_to_old)))
     )
 
+    return res
 
 @dataclass
 class LabeledScatter2Df:
@@ -46,7 +46,8 @@ class LabeledScatter2Df:
 def to_labeled_scatter2_df(df: Df, col_x: str, col_y: str, col_label: str) -> Result[LabeledScatter2Df, CreateDfErr]:
     new_to_old = {"x": col_x, "y": col_y, "label": col_label}
     old_to_new = {v: k for k, v in new_to_old.items()}
-    return Ok(
+
+    return (
         df
             .map_schema(
                 DfJsonSchema.from_dict({
@@ -57,7 +58,7 @@ def to_labeled_scatter2_df(df: Df, col_x: str, col_y: str, col_label: str) -> Re
                 }).unwrap(),
                 old_to_new
             )
-            .and_then(lambda df: LabeledScatter2Df(df, new_to_old)),
+            .and_then(lambda df: Ok(LabeledScatter2Df(df, new_to_old)))
     )
 
 def scatter2_df_aggregate(df: Scatter2Df, groupby_method: str = "mean") -> Result[pd.DataFrame, str]:
@@ -100,7 +101,6 @@ def alt_scatter2(df: Scatter2Df, groupby_method: str = "mean"):
         y=alt.Y("y", title=df.new_to_old["y"])
     )
 
-
 def alt_colored_scatter2(df: LabeledScatter2Df, groupby_method: str = "mean"):
     import altair as alt
 
@@ -112,12 +112,12 @@ def alt_colored_scatter2(df: LabeledScatter2Df, groupby_method: str = "mean"):
         color=alt.Color("label:N", title=df.new_to_old["label"])
     )
 
-
 def mpl_scatter2(
     df: Scatter2Df, 
     opt_ax: Optional[Axes] = None, 
     opt_point_color: Optional[str] = None, 
     opt_label: Optional[str] = None, 
+    opt_title: Optional[str] = None,
     groupby_method: str = "mean",
     s: int = 4, 
     polyfit: int = 0, 
@@ -145,7 +145,10 @@ def mpl_scatter2(
     df_agg = scatter2_df_aggregate(df, groupby_method).unwrap()
 
     ax.scatter(df_agg["x"], df_agg["y"], alpha=0.5, s=s, color=opt_point_color, label=opt_label)  # Creates the scatter plot on the specified ax
-    ax.set_title(f'Scatter Plot of {df.new_to_old["x"]} vs {df.new_to_old["y"]}')  # Adds a title to the plot
+
+    if opt_title is not None:
+        ax.set_title(opt_title)  # Adds a title to the plot
+        # ax.set_title(f'Scatter Plot of {df.new_to_old["x"]} vs {df.new_to_old["y"]}')  # Adds a title to the plot
     ax.set_xlabel(df.new_to_old["x"])  # Labels the x-axis
     ax.set_ylabel(df.new_to_old["y"])  # Labels the y-axis
     ax.grid(True)  # Adds a grid
@@ -196,3 +199,28 @@ def mpl_scatter2(
     if opt_fig is not None:
         plt.legend()
         plt.show()
+
+
+def mpl_with_widgets(plot_data, widg, widg_cols=3):
+    import ipywidgets as widgets
+    from IPython.display import display
+
+    widget_output = widgets.interactive_output(plot_data, widg)
+
+    # Group by `widg_cols` per row
+    groups = []
+    group = []
+    for i, k in enumerate(widg):
+        if i % widg_cols == 0 and i != 0:
+            groups.append(group)
+            group = []
+        group.append(widg[k])
+    groups.append(group)
+
+    hboxes = []
+    for group in groups:
+        hboxes.append(widgets.HBox([e for e in group]))
+
+    vbox = widgets.VBox([hbox for hbox in hboxes])
+
+    display(vbox, widget_output)

@@ -242,7 +242,8 @@ class Rat(IntoTup2Int, IntoFloat, FromFloat["Rat"], IntoExpr, FromExpr["Rat"], O
         def eval_numerator_denominator() -> Tuple[float, float]:
             tup: Tuple[float, float] = (
                 expr.as_numer_denom()
-                    | pipe.Of[Tuple[sp.Expr, sp.Expr]].to(pipe.tup2_unpack(lambda numerator, denominator:
+                    | pipe.Of[Tuple[sp.Expr, sp.Expr]]
+                    .map(pipe.tup2_unpack(lambda numerator, denominator:
                         (
                             numerator.evalf(),
                             denominator.evalf(),

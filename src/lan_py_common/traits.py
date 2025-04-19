@@ -9,13 +9,13 @@ class TrToJson(Protocol):
         """
 
 class TrDescribe(Protocol):
-    def describe(self) -> str:
+    def describe(self) -> str: 
         """
         Offers a description for the object
         """
 
 class TrVerifyBySchema(Protocol):
-    def verify_by_schema(self, schema: Any, verify_data=False) -> Result[bool, any]:
+    def verify_by_schema(self, schema: Any, verify_data=False) -> Result[bool, Any]:
         """
         Checks that the object upholds the schema contract. verify data is optional as it can be
         expensive.
@@ -23,14 +23,14 @@ class TrVerifyBySchema(Protocol):
 
 class TrFromSchema(Protocol):
     @staticmethod
-    def from_schema(schema: Any) -> Result[Self, Any]:
+    def from_schema(schema: Any) -> Result['TrFromSchema', Any]:
         """
         Creates the object from a schema
         """
 
 class TrFromSchemaAndData(Protocol):
     @staticmethod
-    def from_schema_and_data(schema: Any, data: dict) -> Result[Self, Any]:
+    def from_schema_and_data(schema: Any, data: dict) -> Result['TrFromSchemaAndData', Any]:
         """
         Creates the object from a schema and initial data
         """
@@ -38,7 +38,7 @@ class TrFromSchemaAndData(Protocol):
 
 class TrFromSchemaAndCsv(Protocol):
     @staticmethod
-    def from_schema_and_csv(schema: Any, csv_filename: str) -> Result[Self, Any]:
+    def from_schema_and_csv(schema: Any, csv_filename: str) -> Result['TrFromSchemaAndCsv', Any]:
         """
         Creates the object from a schema and initial data
         """
@@ -52,14 +52,14 @@ class TrMapSchema(Protocol):
 
 class TrFromDict(Protocol):
     @staticmethod
-    def from_dict(d: Dict[Hashable, Any]) -> Result[Self, Any]:
+    def from_dict(d: Dict[Hashable, Any]) -> Result['TrFromDict', Any]:
         """
         Parses a dictionary into this object
         """
 
 class TrFromStr(Protocol):
     @staticmethod
-    def from_str(s: str) -> Result[Self, Any]:
+    def from_str(s: str) -> Result['TrFromStr', Any]:
         """
         Parses a string into this object
         """

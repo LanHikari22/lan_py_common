@@ -1,13 +1,13 @@
 import enum
-from typing import Hashable, Self, Tuple
+from typing import Hashable, Self, Tuple, cast
 import checkpipe as pipe
 from dataclasses import dataclass
 import classes
-import pandas as pd
+import pandas as pd # type: ignore
 import numpy as np
 import copy
-from pandas.api.types import pandas_dtype, is_extension_array_dtype
-from pandas.core.dtypes.base import ExtensionDtype
+from pandas.api.types import pandas_dtype, is_extension_array_dtype # type: ignore
+from pandas.core.dtypes.base import ExtensionDtype # type: ignore
 from .traits import *
 from .common import *
 
@@ -60,7 +60,7 @@ class FromStrForDfJsonSchemaErrTy(enum.Enum):
 
 FromStrForDfJsonSchemaErr = Tuple[FromStrForDfJsonSchemaErrTy, str]
 
-class ImplTrFromStrForDfJsonSchema(Protocol):
+class ImplTrFromStr_ForDfJsonSchema(Protocol):
     @staticmethod
     def from_str(s: str) -> Result['DfJsonSchema', FromStrForDfJsonSchemaErr]:
         import json
@@ -84,7 +84,7 @@ class ImplTrFromStrForDfJsonSchema(Protocol):
             )
 
         if not is_flat_fn():
-            return Err((FromStrForDfJsonSchemaErrTy.SchemaNotFlat, e.msg))
+            return Err((FromStrForDfJsonSchemaErrTy.SchemaNotFlat, ""))
         
         # Extract the special ty column
         ty_name_query = (
@@ -168,19 +168,18 @@ class ImplTrFromStrForDfJsonSchema(Protocol):
         )
         
         return Ok(DfJsonSchema(s, ty_name_query[0], cols, col_to_ty_s, col_to_nullable))
-        
 
-class ImplTrFromDictForDfJsonSchema(TrFromDict):
+class ImplTrFromDict_ForDfJsonSchema(TrFromDict):
     @staticmethod
-    def from_dict(d: Dict[Hashable, Any]) -> Result[Self, FromStrForDfJsonSchemaErr]:
+    def from_dict(d: Dict[Hashable, Any]) -> Result['DfJsonSchema', FromStrForDfJsonSchemaErr]:
         import json
 
         return DfJsonSchema.from_str(json.dumps(d))
     
 @dataclass
 class DfJsonSchema(
-    ImplTrFromStrForDfJsonSchema,
-    ImplTrFromDictForDfJsonSchema
+    ImplTrFromStr_ForDfJsonSchema,
+    ImplTrFromDict_ForDfJsonSchema
 ):
     schema: str
     ty: str
@@ -189,8 +188,8 @@ class DfJsonSchema(
     col_to_nullable: Dict[str, bool]
 
 
-class ImplTrDescribeForDf(TrDescribe):
-    def describe(self: 'Df') -> str:
+class ImplTrDescribe_ForDf(TrDescribe):
+    def describe(self: 'Df') -> str: # type: ignore
         return f'Df with schema {self.schema}'
 
 class VerifyBySchemaDfErrTy(enum.Enum):
@@ -202,7 +201,7 @@ class VerifyBySchemaDfErrTy(enum.Enum):
 VerifyBySchemaDfErr = Tuple[VerifyBySchemaDfErrTy, str]
 
 class ImplTrVerifyBySchemaForDf(TrVerifyBySchema):
-    def verify_by_schema(self: 'Df', schema: DfJsonSchema, verify_data=False) -> Result[None, VerifyBySchemaDfErr]:
+    def verify_by_schema(self: 'Df', schema: DfJsonSchema, verify_data=False) -> Result[None, VerifyBySchemaDfErr]: # type: ignore
         import numpy as np
 
         if self.schema.ty == schema.ty:
@@ -244,11 +243,11 @@ class ImplTrVerifyBySchemaForDf(TrVerifyBySchema):
                             | pipe.OfIter[Tuple[Hashable, Any]]
                             .map(pipe.tup2_unpack(lambda col, val:
                                 Err((CreateDfErrTy.InvalidNullValue, 
-                                    f'expected non-null type {schema.col_to_ty_s[col]} for col {col}'))
-                                    if not schema.col_to_nullable[col] and val is None else
+                                    f'expected non-null type {schema.col_to_ty_s[str(col)]} for col {col}'))
+                                    if not schema.col_to_nullable[str(col)] and val is None else
                                 Err((CreateDfErrTy.ColumnOfInvalidTy, 
-                                    f'expected type {schema.col_to_ty_s[col]} found {type(val)} for col {col}'))
-                                    if val is not None and not is_dtype_compatible(type(val), schema.col_to_ty_s[col]) else
+                                    f'expected type {schema.col_to_ty_s[str(col)]} found {type(val)} for col {col}'))
+                                    if val is not None and not is_dtype_compatible(type(val), schema.col_to_ty_s[str(col)]) else
                                 Ok(None)
                             ))
                             | pipe.OfResultIter[None, CreateDfErr]
@@ -262,7 +261,11 @@ class ImplTrVerifyBySchemaForDf(TrVerifyBySchema):
 
         return (
             all_tys_matching()
-                .and_then(lambda _: not verify_data or check_rows_for_null())
+                .and_then(lambda _: 
+                    Ok(None)
+                        if not verify_data else
+                    check_rows_for_null()
+                )
         )
 
 
@@ -277,7 +280,7 @@ class CreateDfErrTy(enum.Enum):
 
 CreateDfErr = Tuple[CreateDfErrTy, str]
 
-class ImplTrFromSchemaForDf(TrFromSchema):
+class ImplTrFromSchema_ForDf(TrFromSchema):
     @staticmethod
     def from_schema(schema: DfJsonSchema) -> Result['Df', CreateDfErr]:
         # Create an empty DataFrame with columns specified in the schema
@@ -287,17 +290,45 @@ class ImplTrFromSchemaForDf(TrFromSchema):
         try:
             df = df.astype(schema.col_to_ty_s)
         except TypeError as e:
-            return Err((CreateDfErrTy.DatatypeNotUnderstood, e.msg))
+            return Err((CreateDfErrTy.DatatypeNotUnderstood, str(e)))
 
         return Ok(Df(schema, df))
 
-class ImplTrFromschemaAndDataForDf(TrFromSchemaAndData):
+class ImplTrFromschemaAndData_ForDf(TrFromSchemaAndData):
     @staticmethod
-    def from_schema_and_data(schema: DfJsonSchema, col_to_val_per_row: Dict[str, List[Any]]) -> Result['Df', CreateDfErr]:
+    def from_schema_and_data(
+        schema: DfJsonSchema, 
+        col_to_val_per_row_union: Dict[str, Union[List[Any], np.ndarray[Any, Any]]]
+        ) -> Result['Df', CreateDfErr]:
+
         init_df_res = Df.from_schema(schema)
         if init_df_res.is_err():
             return init_df_res
         init_df = init_df_res.unwrap()
+
+        # First, map out any potential ndarrays to lists
+        def val_to_list(val: Union[List[Any], np.ndarray[Any, Any]]) -> List[Any]:
+            if isinstance(val, list):
+                return val
+            else:
+                return cast(List[Any], val.tolist())
+
+        col_to_val_per_row = (
+            col_to_val_per_row_union
+                .items()
+                .__iter__()
+                | pipe.OfIter[Tuple[str, Union[List[Any], np.ndarray[Any, Any]]]]
+                .map(pipe.tup2_unpack(lambda col, val:
+                    (
+                        col,
+                        val_to_list(val)
+                     )
+                ))
+                | pipe.OfIter[Tuple[str, List[Any]]]
+                .to_list()
+                | pipe.Of[List[Tuple[str, List[Any]]]]
+                .map(lambda lst: dict(lst))
+        )
 
         records_res = (
             col_to_val_per_row
@@ -306,7 +337,7 @@ class ImplTrFromschemaAndDataForDf(TrFromSchemaAndData):
                 .map_err(lambda e: (CreateDfErrTy.InvalidDatarecords, e))
         )
         if records_res.is_err():
-            return records_res
+            return Err(records_res.unwrap_err())
         records = records_res.unwrap()
 
         val_per_col_per_row_res = (
@@ -334,7 +365,7 @@ class ImplTrFromschemaAndDataForDf(TrFromSchemaAndData):
                 .flatten()
         )
         if val_per_col_per_row_res.is_err():
-            return val_per_col_per_row_res
+            return Err(val_per_col_per_row_res.unwrap_err())
         val_per_col_per_row = val_per_col_per_row_res.unwrap()
 
         # Add the data
@@ -347,7 +378,7 @@ class ImplTrFromschemaAndDataForDf(TrFromSchemaAndData):
         
         return Ok(mut_df)
 
-class ImplTrFromSchemaAndCsvForDf(TrFromSchemaAndCsv):
+class ImplTrFromSchemaAndCsv_ForDf(TrFromSchemaAndCsv):
     @staticmethod
     def from_schema_and_csv(schema: DfJsonSchema, csv_filename: str) -> Result['Df', CreateDfErr]:
         df = pd.read_csv(csv_filename)
@@ -369,12 +400,9 @@ class ImplTrFromSchemaAndCsvForDf(TrFromSchemaAndCsv):
 
         return Df.from_schema_and_data(schema, filtered_val_per_row_per_col)
 
-
-
-
-class ImplTrMapSchemaForDf(TrMapSchema):
-    def map_schema(
-            self: 'Df', 
+class ImplTrMapSchema_ForDf(TrMapSchema):
+    def map_schema( # type: ignore
+            self: 'Df',
             new_schema: DfJsonSchema, 
             col_to_new_col: Dict[str, str]
     ) -> Result['Df', CreateDfErr]:
@@ -438,16 +466,13 @@ class ImplTrMapSchemaForDf(TrMapSchema):
 
         return Ok(Df(new_schema, new_df))
 
-
-
-
 @dataclass
 class Df(
-    ImplTrDescribeForDf,
-    ImplTrFromSchemaForDf,
-    ImplTrFromschemaAndDataForDf,
-    ImplTrMapSchemaForDf,
-    ImplTrFromSchemaAndCsvForDf,
+    ImplTrDescribe_ForDf,
+    ImplTrFromSchema_ForDf,
+    ImplTrFromschemaAndData_ForDf,
+    ImplTrMapSchema_ForDf,
+    ImplTrFromSchemaAndCsv_ForDf,
 ):
     schema: DfJsonSchema
     df: pd.DataFrame
