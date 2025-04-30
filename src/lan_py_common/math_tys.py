@@ -1,11 +1,17 @@
+from dataclasses import dataclass
 import math
-from typing import Any, Callable, List, Self, Tuple, Type, TypeVar, Generic, Union
+from typing import Any, Callable, List, Optional, Protocol, Self, Tuple, Type, TypeVar, Generic, Union, cast
 import checkpipe as pipe
 import sympy as sp # type: ignore
 
-class Ord():
+T = TypeVar('T')
+CT = TypeVar('CT', covariant=True)
+
+class TrOrd(Protocol):
     def ord(self, right: Self) -> int:
-        raise NotImplementedError()
+        """
+        Possible values are <(-1) ==(0) >(1)
+        """
     
     def __lt__(self, right: Self) -> bool:
         return (
@@ -44,201 +50,135 @@ class Ord():
             ord == 0 or ord == 1
         )
 
-class IntoInt():
+class TrIntoInt(Protocol):
     def into_int(self) -> int:
-        raise NotImplementedError()
+        """
+        """
 
-class IntoFloat():
+class TrFromInt(Protocol):
+    @classmethod
+    def from_int(cls: 'TrFromInt', n: int) -> 'TrFromInt':
+        """ """
+
+class TrIntoFloat(Protocol):
     def into_float(self) -> float:
-        raise NotImplementedError()
+        """ """
 
-FromFloatT = TypeVar("FromFloatT", bound="FromFloat") # type: ignore
-class FromFloat(Generic[FromFloatT]):
+class TrFromFloat(Protocol):
     @classmethod
-    def from_float(cls: Type[FromFloatT], f: float) -> FromFloatT:
-        raise NotImplementedError()
+    def from_float(cls: 'TrFromFloat', f: float) -> 'TrFromFloat':
+        """ """
 
-class IntoTup2Int():
+class TrIntoTup2Int(Protocol):
     def into_tup2_int(self) -> Tuple[int, int]:
-        raise NotImplementedError()
+        """ """
 
-class IntoTup2Float():
+class TrFromTup2Int(Protocol):
+    @staticmethod
+    def from_tup2_int(cls: 'TrFromTup2Int', tup: Tuple[int, int]) -> 'TrFromTup2Int':
+        """ """
+
+class TrIntoTup2Float(Protocol):
     def into_tup2_float(self) -> Tuple[float, float]:
-        raise NotImplementedError()
+        """ """
 
-class IntoTup2x2Int():
+class TrIntoTup2x2Int(Protocol):
     def into_tup2x2_int(self) -> Tuple[Tuple[int, int], Tuple[int, int]]:
-        raise NotImplementedError()
+        """ """
 
-class IntoExpr():
+class TrIntoExpr():
     def into_expr(self) -> sp.Expr:
-        raise NotImplementedError()
+        """ """
 
-FromT = TypeVar("FromT", bound="FromExpr") # type: ignore
-class FromExpr(Generic[FromT]):
+class TrFromExpr(Protocol):
     @classmethod
-    def from_expr(cls: Type[FromT], expr: sp.Expr) -> FromT:
-        raise NotImplementedError()
+    def from_expr(cls: 'TrFromExpr', expr: sp.Expr) -> 'TrFromExpr':
+        """ """
+
+class TrIntervalT(TrIntoTup2Int, TrOrd):
+    pass
+
+IntervalT = TypeVar("IntervalT", bound=TrIntervalT)
 
 
-class Nat(IntoInt, IntoExpr, FromExpr["Nat"], Ord):
-    def __init__(self, n: int):
-        assert n > 0, f"Nat must be positive. {n} is not."
-        self.val = n
-    
-    # Implements IntoInt
-    def into_int(self) -> int:
-        return (
-            self.val
-        )
-    
-    # Implements Ord
-    def ord(self, right: Self) -> int:
-        return (
-            -1 if self.val < right.val else
-             1 if self.val > right.val else
-             0
-        )
+class ImplTrIntoInt_ForNat(TrIntoInt):
+    def into_int(self: 'Nat') -> int: # type: ignore
+        return self.val
 
-    # Implements IntoExpr
-    def into_expr(self) -> sp.Expr:
-        return (
-            sp.sympify(self.into_int())
-        )
-    
-    # Implements FromExpr
+class ImplTrIntoInt_ForNatZ(TrIntoInt):
+    def into_int(self: 'NatZ') -> int: # type: ignore
+        return self.val
+
+class ImplTrIntoInt_ForInt(TrIntoInt):
+    def into_int(self: 'Int') -> int: # type: ignore
+        return self.val
+
+
+class ImplTrFromInt_ForNat(TrFromInt):
     @classmethod
-    def from_expr(cls: Type[Self], expr: sp.Expr) -> Self:
-        f = (
-            expr.evalf()
+    def from_int(cls: 'Nat', n: int) -> 'Nat': # type: ignore
+        return Nat.new(n)
+
+class ImplTrFromInt_ForNatZ(TrFromInt):
+    @classmethod
+    def from_int(cls: 'NatZ', n: int) -> 'NatZ': # type: ignore
+        return NatZ.new(n)
+
+class ImplTrFromInt_ForInt(TrFromInt):
+    @classmethod
+    def from_int(cls: 'Int', n: int) -> 'Int': # type: ignore
+        return Int.new(n)
+
+
+class ImplTrIntoTup2Int_ForRat(TrIntoTup2Int):
+    def into_tup2_int(self: 'Rat') -> Tuple[int, int]: # type: ignore
+        return (self.m, self.n)
+
+class ImplTrFromTup2Int_ForRat(TrFromTup2Int):
+    @staticmethod
+    def from_tup2_int(cls: 'Rat', tup: Tuple[int, int]) -> 'Rat': # type: ignore
+        return cls.new(tup[0], tup[1])
+
+class ImplTrIntoTup2x2Int_ForInterval(Generic[IntervalT], TrIntoTup2x2Int):
+    def into_tup2x2_int(self: 'Interval[IntervalT]') -> Tuple[Tuple[int, int], Tuple[int, int]]: # type: ignore
+        return (
+            self.m.into_tup2_int(), 
+            self.n.into_tup2_int(),
         )
 
+class ImplTrIntoFloat_ForRat(TrIntoFloat):
+    def into_float(self: 'Rat') -> float: # type: ignore
+        return float(self.m) /  float(self.n)
+
+class ImplTrFromFloat_ForRat(TrFromFloat):
+    @classmethod
+    def from_float(cls, f: float) -> 'Rat': # type: ignore
+        rat = sp.Rational(f)
+        return cast(Rat, cls).new(rat.numerator, rat.denominator)
+
+NatLike = TypeVar('NatLike', bound='TrIntoInt')
+FromNatLike = TypeVar('FromNatLike', bound='TrFromInt')
+
+class ImplTrIntoExpr_ForNatLike(Generic[NatLike], TrIntoExpr):
+    def into_expr(self: NatLike) -> sp.Expr: # type: ignore
+        return sp.sympify(self.into_int())
+
+class ImplTrIntoExpr_ForRat(TrIntoExpr):
+    def into_expr(self: 'Rat') -> sp.Expr: # type: ignore
+        (n, m) = self.into_tup2_int()
+        return sp.sympify(f'{n}/{m}')
+
+class ImplTrFromExpr_ForNatLike(Generic[FromNatLike], TrFromExpr):
+    @classmethod
+    def from_expr(cls: FromNatLike, expr: sp.Expr) -> FromNatLike: # type: ignore
+        f = expr.evalf()
         assert f - int(f) == 0
 
-        return (
-            cls(int(f))
-        )
+        return cls.from_int(int(f)) # type: ignore
 
-class NatZ(IntoInt, IntoExpr, FromExpr["NatZ"], Ord):
-    def __init__(self, n: int):
-        assert n >= 0, f"NatZ must be non-zero. {n} is not."
-        self.val = n
-    
-    # Implements IntoInt
-    def into_int(self) -> int:
-        return (
-            self.val
-        )
-    
-    # Implements Ord
-    def ord(self, right: Self) -> int:
-        return (
-            -1 if self.val < right.val else
-             1 if self.val > right.val else
-             0
-        )
-
-    # Implements IntoExpr
-    def into_expr(self) -> sp.Expr:
-        return (
-            sp.sympify(self.into_int())
-        )
-    
-    # Implements FromExpr
+class ImplTrFromExpr_ForRat(TrFromExpr):
     @classmethod
-    def from_expr(cls: Type[Self], expr: sp.Expr) -> Self:
-        f = (
-            expr.evalf()
-        )
-
-        assert(f - int(f) == 0)
-
-        return (
-            cls(int(f))
-        )
-
-
-class Int(IntoInt, IntoExpr, FromExpr["Int"], Ord):
-    def __init__(self, n: int):
-        self.val = n
-    
-    # Implements IntoInt
-    def into_int(self) -> int:
-        return (
-            self.val
-        )
-
-    # Implements IntoExpr
-    def into_expr(self) -> sp.Expr:
-        return (
-            sp.sympify(self.into_int())
-        )
-
-    # Implements FromExpr
-    @classmethod
-    def from_expr(cls: Type[Self], expr: sp.Expr) -> Self:
-        f = (
-            expr.evalf()
-        )
-
-        assert(f - int(f) == 0)
-
-        return (
-            cls(int(f))
-        )
-
-    # Implements Ord
-    def ord(self, right: Self) -> int:
-        return (
-            -1 if self.val < right.val else
-             1 if self.val > right.val else
-             0
-        )
-
-class Rat(IntoTup2Int, IntoFloat, FromFloat["Rat"], IntoExpr, FromExpr["Rat"], Ord):
-    def __init__(self, n: int , m: int):
-        assert(m != 0)
-
-        self.n = n
-        self.m = m
-    
-    # Implements IntoTup2Int
-    def into_tup2_int(self) -> Tuple[int, int]:
-        return (
-            (self.n, self.m)
-        )
-
-    # Implements IntoFloat
-    def into_float(self) -> float:
-        return (
-            float(self.n) /  float(self.m)
-        )
-    
-    # Implements FromFloat
-    @classmethod
-    def from_float(cls: Type[Self], f: float) -> Self:
-        # sp.Rational(sp.sympify("2**(1/12)").evalf())
-
-        rat = (
-            sp.Rational(f)
-        )
-
-        return (
-            cls(rat.numerator, rat.denominator)
-        )
-
-    # Implements IntoExpr
-    def into_expr(self) -> sp.Expr:
-        (n, m) = (
-            self.into_tup2_int()
-        )
-        return (
-            sp.sympify(f'{n}/{m}')
-        )
-
-    # Implements FromExpr
-    @classmethod
-    def from_expr(cls: Type[Self], expr: sp.Expr) -> Self:
+    def from_expr(cls: 'Rat', expr: sp.Expr) -> 'Rat': # type: ignore
         def eval_numerator_denominator() -> Tuple[float, float]:
             tup: Tuple[float, float] = (
                 expr.as_numer_denom()
@@ -251,29 +191,30 @@ class Rat(IntoTup2Int, IntoFloat, FromFloat["Rat"], IntoExpr, FromExpr["Rat"], O
                     ))
             )
 
-            return (
-                tup
-            )
+            return tup
 
-        (numerator, denominator) = (
-            eval_numerator_denominator()
-        )
+        numerator, denominator = eval_numerator_denominator()
 
         assert(numerator - int(numerator) == 0)
         assert(denominator - int(denominator) == 0)
 
+        return cls(int(numerator), int(denominator)) # type: ignore
+
+
+
+class ImplTrOrd_ForNatLike(Generic[NatLike], TrOrd):
+    def ord(self: NatLike, right: NatLike) -> int: # type: ignore
         return (
-            cls(int(numerator), int(denominator))
+            -1 if self.into_int() < right.into_int() else
+             1 if self.into_int() > right.into_int() else
+             0
         )
 
-
-    # Implements Ord
-    def ord(self, right: Self) -> int:
+class ImplTrOrd_ForRat(TrOrd):
+    def ord(self: 'Rat', right: 'Rat') -> int: # type: ignore
         (n, m) = (
-            (
-                self.into_float(),
-                right.into_float(),
-            )
+            self.into_float(),
+            right.into_float(),
         )
 
         return (
@@ -282,38 +223,114 @@ class Rat(IntoTup2Int, IntoFloat, FromFloat["Rat"], IntoExpr, FromExpr["Rat"], O
              0
         )
 
-class IntoIntAndOrd(IntoInt, Ord):
-    pass
+@dataclass
+class Nat(
+    ImplTrIntoInt_ForNat, 
+    ImplTrFromInt_ForNat,
+    ImplTrIntoExpr_ForNatLike['Nat'], 
+    ImplTrFromExpr_ForNatLike['Nat'],
+    ImplTrOrd_ForNatLike['Nat'],
+):
 
-IntervalT = TypeVar("IntervalT", bound=IntoIntAndOrd)
-class Interval(Generic[IntervalT], IntoTup2Int):
-    def __init__(self, n: IntervalT, m: IntervalT):
-        assert(n <= m)
+    val: int
 
-        self.n = n
-        self.m = m
+    @staticmethod
+    def new(n: int) -> 'Nat':
+        assert n > 0, f"Nat must be positive. {n} is not."
+        return Nat(n)
+    
 
-    # Implements IntoTup2Int
-    def into_tup2_int(self) -> Tuple[int, int]:
-        return (
-            (self.n.into_int(), self.m.into_int())
-        )
+@dataclass
+class NatZ(
+    ImplTrIntoInt_ForNatZ, 
+    ImplTrFromInt_ForNatZ,
+    ImplTrIntoExpr_ForNatLike['NatZ'], 
+    ImplTrFromExpr_ForNatLike['NatZ'],
+    ImplTrOrd_ForNatLike['NatZ'],
+):
+    val: int
 
-class IntervalRat(IntoTup2Float,IntoTup2x2Int):
-    def __init__(self, n: Rat, m: Rat):
-        assert(n <= m)
+    @staticmethod
+    def new(n: int) -> 'NatZ':
+        assert n >= 0, f"NatZ must be non-negative. {n} is not."
+        return NatZ(n)
+    
 
-        self.n = n
-        self.m = m
+@dataclass
+class Int(
+    ImplTrIntoInt_ForInt, 
+    ImplTrFromInt_ForInt,
+    ImplTrIntoExpr_ForNatLike['Int'], 
+    ImplTrFromExpr_ForNatLike['Int'],
+    ImplTrOrd_ForNatLike['Int'],
+):
+    val: int
 
-    # Implements IntoTup2x2Int
-    def into_tup2x2_int(self) -> Tuple[Tuple[int, int], Tuple[int, int]]:
-        return (
-            ((self.n.into_tup2_int(), self.m.into_tup2_int()))
-        )
+    @staticmethod
+    def new(n: int) -> 'Int':
+        return Int(n)
+    
+
+@dataclass
+class Rat(
+    ImplTrIntoTup2Int_ForRat, 
+    ImplTrFromTup2Int_ForRat,
+    ImplTrIntoFloat_ForRat, 
+    ImplTrFromFloat_ForRat,
+    ImplTrIntoExpr_ForRat,
+    ImplTrFromExpr_ForRat,
+    ImplTrOrd_ForRat,
+):
+    m: int
+    n: int
+
+    @staticmethod
+    def new(m: int, n: int) -> 'Rat':
+        assert(n != 0)
+        return Rat(m, n)
+
+@dataclass
+class Interval(
+    Generic[IntervalT], 
+    ImplTrIntoTup2x2Int_ForInterval[IntervalT],
+):
+    m: IntervalT
+    n: IntervalT
+
+    @staticmethod
+    def new(m: IntervalT, n: IntervalT) -> 'Interval[IntervalT]':
+        assert(m <= n)
+        return Interval[IntervalT](m, n)
 
 
-SymFnT = TypeVar("SymFnT", bound=Union[IntoInt, IntoTup2Int])
+class TrFitsEquation(Protocol):
+    def fits_equation(self, variables: List[Any]) -> Optional[bool]:
+        """
+        True if substituting the variables yields symmetry, false if it yields asymmetry, and 
+        None if fitting fails
+        """
+
+class ImplTrFitsEquation_ForProj3(TrFitsEquation):
+    def fits_equation(self: 'Proj3', variables: List[Rat]) -> Optional[bool]: # type: ignore
+        if len(variables) != 3:
+            return None
+        
+
+
+@dataclass
+class Proj3:
+    a: Rat
+    b: Rat
+    c: Rat
+
+    @staticmethod
+    def new(a: Rat, b: Rat, c: Rat) -> 'Proj3':
+        assert a.into_float() != 0 or b.into_float() != 0
+
+        return Proj3(a, b, c)
+
+
+SymFnT = TypeVar("SymFnT", bound=Union[TrIntoInt, TrIntoTup2Int])
 SymFnU = TypeVar("SymFnU")
 class SymFn1(Generic[SymFnT, SymFnU]):
     def __init__(self, fn_expr: Callable[[sp.Expr], sp.Expr], fn_eval: Callable[[SymFnT], SymFnU]):
@@ -333,20 +350,13 @@ class SymFn1(Generic[SymFnT, SymFnU]):
 ListT = TypeVar("ListT")
 def list_append(l: List[ListT], v: ListT) -> List[ListT]:
     l.append(v)
-
-    return (
-        l
-    )
+    return l
 
 
 def square_fn() -> SymFn1[Rat, Rat]:
-    fn_expr = (
-        lambda x: x**2
-    )
+    fn_expr = lambda x: x**2
 
-    fn_eval = (
-        lambda x: Rat.from_float(x.into_float()**2)
-    )
+    fn_eval = lambda x: Rat.from_float(cast(float, x.into_float())**2)
 
     return (
         SymFn1[Rat, Rat](fn_expr, fn_eval)

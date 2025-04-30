@@ -202,7 +202,10 @@ def mpl_scatter2(
 
 
 def mpl_with_widgets(plot_data, widg, widg_cols=3):
-    import ipywidgets as widgets
+    """
+    plot_data takes input from each defined widget. See notebooks/scatter2_widgets.ipynb.
+    """
+    import ipywidgets as widgets # type: ignore
     from IPython.display import display
 
     widget_output = widgets.interactive_output(plot_data, widg)
